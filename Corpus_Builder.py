@@ -1,3 +1,4 @@
+import re
 from modules.tokenizer_wrapper import TokenizerWrapper
 import csv
 import os
@@ -5,6 +6,8 @@ from tqdm import tqdm
 import numpy as np
 import config
 import torch
+import re
+import sys
 
 
 class DatasetBuilder:
@@ -23,8 +26,26 @@ class DatasetBuilder:
         self.unique_tokens = set()
         self.total_tokens = 0
 
-    def read_corpus_batches(self):
+    def text_formatter(self,text):
+      
+        cleaned_text = re.sub(r"[^a-zA-Z0-9\s.,;:!?%$()\-/]","",text)
+        cleaned_text = re.sub(r"\s+"," ",cleaned_text)
+        cleaned_text =re.sub(r"[\t]+"," ",cleaned_text)
+       
+        return cleaned_text
 
+   
+
+    def read_corpus_batches(self):
+        
+        new_limit = sys.maxsize
+        while True:
+            try:
+                csv.field_size_limit(new_limit)
+                break
+            except OverflowError:
+                # Decrease the limit by a factor of 10 if it's too large
+                new_limit = int(new_limit / 10)
         with open(self.corpus,'r',encoding='utf-8') as f:
            # csvreader = csv.reader(f,delimiter="|")
             csvreader = csv.reader(f)
@@ -32,13 +53,14 @@ class DatasetBuilder:
             no_row = 0
             for row in csvreader:
                 no_row +=1
-              #  print("Row:",row)
-                #line = ", ".join(row[1])
+               # print("No Row",no_row)
                 line = ", ".join(row).strip()
-              #  print("Line",line)
+                line = self.text_formatter(line)
+                
+              
                 if not line:
                     continue
-             #   line += '\n'
+           
                 lines.append(line + '\n')
 
                 if len(lines) >= self.read_batch_size:
@@ -50,7 +72,7 @@ class DatasetBuilder:
               #      break
 
             if lines:
-                #yield([self.tokenizer.encode(l) for l in lines])
+                
                 yield lines
 
         print("Total Number of Rows Read:",no_row)
@@ -93,6 +115,12 @@ class DatasetBuilder:
         arr.flush()
         print(f'{split}.bin.written:{arr_len:,} tokens')
 
+    def make_strided_data(self,tokens, block_size, stride):
+        out = []
+        for i in range(0, len(tokens) - block_size + 1, stride):
+            out.extend(tokens[i:i+block_size])
+        return np.array(out, dtype=np.int64)
+
     def get_batch(self,split):
 
         if split == 'train':
@@ -100,6 +128,7 @@ class DatasetBuilder:
         else:
             data=np.memmap(config.bin_dir+'/val.bin',dtype=np.uint16,mode='r')
             
+        #data = self.make_strided_data(data, config.block_size, config.stride)
         ix = torch.randint(len(data) - config.block_size,(config.batch_size,))
         x = torch.stack([torch.from_numpy((data[i:i+config.block_size]).astype(np.int64)) 
                             for i in ix])
