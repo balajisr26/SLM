@@ -2,35 +2,53 @@ import torch
 import torch.nn as nn
 from modules.Transformers import TransformerBlock, LayerNorm
 import torch.nn.functional as F
+import math
 
 
 class GPT(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.tok_emb = nn.Embedding(config.vocab_size, config.n_embd)
-        self.pos_emb = nn.Embedding(config.block_size , config.n_embd)
+        self.tok_emb = nn.Embedding(config.vocab_size,config.n_embd)
+        self.pos_emb = nn.Embedding(config.block_size,config.n_embd)
         self.drop_emb = nn.Dropout(config.dropout)
-
         self.trf_blocks = nn.Sequential(
-            *[TransformerBlock(config) for _ in range(config.n_layer)])
-
+             *[TransformerBlock(config) for _ in range(config.n_layers)])
+        
         self.final_norm = LayerNorm(config.n_embd,config.bias)
-        self.out_head = nn.Linear(
-            config.n_embd, config.vocab_size, bias=False
-        )
+        self.out_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+       # self.transformer.wte.weight = self.lm_head.weight  # weight tying
 
-    def forward(self, in_idx,targets=None):
-        batch_size, seq_len = in_idx.shape
-        tok_embeds = self.tok_emb(in_idx)
+        self.apply(self._init_weights)
+        for pn, p in self.named_parameters():
+            if pn.endswith('c_proj.weight'):
+                nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * config.n_layer))
 
-        pos_embeds = self.pos_emb(
-            torch.arange(seq_len, device=in_idx.device)
-        )
-        x = tok_embeds + pos_embeds
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def forward(self, idx, targets=None):
+        device = idx.device
+        b, t = idx.size()
+        assert t <= self.config.block_size
+      #  print("b",b,"t",t)
+        tok_emb = self.tok_emb(idx)
+        pos = self.pos_emb(torch.arange(0, t, dtype=torch.long, device=device))
+      #  print("Before Main Forward")
+       # print("Tok Emb",tok_emb.shape)
+      #  print("Pos",pos.shape)
+        x  = tok_emb + pos
+      #  print("After Tok_emb and Pos")
         x = self.drop_emb(x)
         x = self.trf_blocks(x)
         x = self.final_norm(x)
+       # pos_emb = self.transformer.wpe(pos)
+        
         if targets is not None:
             logits = self.out_head(x)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
@@ -38,7 +56,7 @@ class GPT(nn.Module):
         else:
             logits = self.out_head(x[:, [-1], :])
             return logits, None
-        
+
     @torch.no_grad()
     def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
         """
@@ -56,4 +74,5 @@ class GPT(nn.Module):
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)
         return idx
+
         
