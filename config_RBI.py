@@ -1,0 +1,19 @@
+import torch
+input_directory = "./input/"
+corpus_file = "./corpus/RBI_Master_Directions.txt"
+output_dir ="./output/"
+bin_dir = "./bin/"
+block_size = 128
+batch_size = 4
+device =  "cuda" if torch.cuda.is_available() else "cpu"
+n_layers = 4
+vocab_size = 50257
+n_head=4
+n_embd=256
+dropout=0.1
+bias=True
+gradient_accumulation_steps=8
+learning_rate =  2e-4
+min_lr = 2e-5
+max_iters = 23001 
+#stride=64
