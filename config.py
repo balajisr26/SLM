@@ -1,0 +1,20 @@
+import torch
+input_directory = "./input/"
+train_corpus_file = "./corpus/tinystories_train_final.txt"
+valid_corpus_file = "./corpus/tinystories_valid_final.txt"
+test_corpus_file = "./corpus/tinystories_test_V2.txt"
+output_dir ="./output/"
+bin_dir = "./bin/"
+block_size = 256
+batch_size = 4
+device =  "cuda" if torch.cuda.is_available() else "cpu"
+n_layers = 6
+vocab_size = 20000
+n_head=8
+n_embd = 384
+dropout=0.1
+bias=False
+gradient_accumulation_steps=32
+learning_rate =  0.0003
+min_lr = 0.00003
+log_interval = 25
