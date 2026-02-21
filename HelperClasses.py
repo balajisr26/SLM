@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class MultiHeadAttention(nn.Module):
@@ -91,17 +92,40 @@ class LayerNorm(nn.Module):
         var = x.var(dim=-1,keepdim=True)
         norm_x = (x - mean) / torch.sqrt(var + self.eps)
         return self.scale * norm_x + self.shift
+    
+class RMSNorm(nn.Module):
+    def __init__(self, emb_dim, eps=1e-5):
+        super().__init__()
+        self.eps = eps
+        self.scale = nn.Parameter(torch.ones(emb_dim))
+
+    def forward(self, x):
+        rms = x.pow(2).mean(dim=-1, keepdim=True)
+        x_norm = x * torch.rsqrt(rms + self.eps)
+        return self.scale * x_norm
 
 
 class MLP(nn.Module):
     def __init__(self,emb_dim):
         super().__init__()
 
-        self.layers = nn.Sequential(nn.Linear(emb_dim,4 * emb_dim)
+        self.layers = nn.Sequential(nn.Linear(emb_dim,4 * emb_dim,bias=False)
                                               ,GELU()
-                                              ,nn.Linear(4 * emb_dim,emb_dim)
+                                              ,nn.Linear(4 * emb_dim,emb_dim,bias=False)
                                     )
         
     def forward(self,x):
         return self.layers(x)
+    
+
+class SwiGLU(nn.Module):
+    def __init__(self, n_embd, hidden_mult=4):
+        super().__init__()
+        hidden_dim = int((hidden_mult * n_embd) * 2 / 3)
+        self.fc1 = nn.Linear(n_embd, hidden_dim * 2, bias=False)
+        self.fc2 = nn.Linear(hidden_dim, n_embd, bias=False)
+
+    def forward(self, x):
+        x_proj, gate = self.fc1(x).chunk(2, dim=-1)
+        return self.fc2(F.silu(gate) * x_proj)
     

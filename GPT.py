@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from modules.Transformers import TransformerBlock, LayerNorm
+from modules.Transformers import TransformerBlock, LayerNorm,RMSNorm
 import torch.nn.functional as F
 import math
 
@@ -15,9 +15,11 @@ class GPT(nn.Module):
         self.trf_blocks = nn.Sequential(
              *[TransformerBlock(config) for _ in range(config.n_layers)])
         
-        self.final_norm = LayerNorm(config.n_embd,config.bias)
+       # self.final_norm = LayerNorm(config.n_embd,config.bias)
+        self.final_norm = RMSNorm(config.n_embd)
         self.out_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-       # self.transformer.wte.weight = self.lm_head.weight  # weight tying
+        self.out_head.weight = self.tok_emb.weight # Weight Tying
+      
 
         self.apply(self._init_weights)
         for pn, p in self.named_parameters():
@@ -39,15 +41,13 @@ class GPT(nn.Module):
       #  print("b",b,"t",t)
         tok_emb = self.tok_emb(idx)
         pos = self.pos_emb(torch.arange(0, t, dtype=torch.long, device=device))
-      #  print("Before Main Forward")
-       # print("Tok Emb",tok_emb.shape)
-      #  print("Pos",pos.shape)
+   
         x  = tok_emb + pos
-      #  print("After Tok_emb and Pos")
+     
         x = self.drop_emb(x)
         x = self.trf_blocks(x)
         x = self.final_norm(x)
-       # pos_emb = self.transformer.wpe(pos)
+      
         
         if targets is not None:
             logits = self.out_head(x)

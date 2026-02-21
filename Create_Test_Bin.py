@@ -8,18 +8,18 @@ import config
 import torch
 import re
 import sys
+import config as ds_config 
 
 
-class DatasetBuilder:
-    def __init__(self,train_corpus,valid_corpus,bin_dir,output_path,tokenizer:TokenizerWrapper,val_split=0.1
+class TestBuilder:
+    def __init__(self,test_corpus,bin_dir,output_path,tokenizer:TokenizerWrapper
                  ,read_batch_size=10000,write_batch_size = 1024):
         
-        self.train_corpus = train_corpus
-        self.valid_corpus = valid_corpus
+        self.test_corpus = test_corpus
         self.bin_dir = bin_dir
         self.output_path = output_path
         self.tokenizer = tokenizer
-        self.val_split = val_split
+    
         self.read_batch_size = read_batch_size
         self.write_batch_size = write_batch_size
 
@@ -37,7 +37,7 @@ class DatasetBuilder:
 
    
 
-    def read_corpus_batches(self,Train=True):
+    def read_corpus_batches(self):
         
         new_limit = sys.maxsize
         while True:
@@ -47,7 +47,7 @@ class DatasetBuilder:
             except OverflowError:
                 # Decrease the limit by a factor of 10 if it's too large
                 new_limit = int(new_limit / 10)
-        with open(self.train_corpus if Train else self.valid_corpus,'r',encoding='utf-8') as f:
+        with open(self.test,'r',encoding='utf-8') as f:
            # csvreader = csv.reader(f,delimiter="|")
             csvreader = csv.reader(f)
             lines = []
@@ -78,17 +78,16 @@ class DatasetBuilder:
 
         print("Total Number of Rows Read:",no_row)
 
-    def process_corpus_batches(self,Train=True):
+    def process_corpus_batches(self):
         tokenized_batch=[]
       #  tokenized_val=[]
 
-        for batch_idx,batch in enumerate(tqdm(self.read_corpus_batches(Train=Train))):
+        for batch_idx,batch in enumerate(tqdm(self.read_corpus_batches())):
             batch_tokens = [self.tokenizer.encode(line) for line in batch]
 
             for toks in batch_tokens:
-                if Train:
-                    self.unique_tokens.update(toks)
-                    self.total_tokens += len(toks)
+                self.unique_tokens.update(toks)
+                self.total_tokens += len(toks)
 
            # n = len(batch_tokens)
            # n_val = int(n * self.val_split)
@@ -117,11 +116,6 @@ class DatasetBuilder:
         arr.flush()
         print(f'{split}.bin.written:{arr_len:,} tokens')
 
-    def make_strided_data(self,tokens, block_size, stride):
-        out = []
-        for i in range(0, len(tokens) - block_size + 1, stride):
-            out.extend(tokens[i:i+block_size])
-        return np.array(out, dtype=np.int64)
 
     def get_batch(self,split):
 
@@ -148,26 +142,19 @@ class DatasetBuilder:
 
     def build(self):
 
-     #train_ids, val_ids = self.process_corpus_batches()
+        print("Inside Build")
 
-     train_ids = self.process_corpus_batches(Train=True)
-     val_ids = self.process_corpus_batches(Train=False)
+        test_ids = self.process_corpus_batches()
 
-     self.write_corpus(train_ids,'train')
-     self.write_corpus(val_ids,'val')
-
-     # Token usage summary
-     print("\n📊 Tokenization Summary")
-     print(f"Total tokens processed: {self.total_tokens:,}")
-     print(f"Unique token IDs used: {len(self.unique_tokens):,}")
-    # print(f"GPT-2 vocab coverage: {len(self.unique_tokens) / self.tokenizer.vocab_size * 100:.2f}%")
-     #print(f"GPT-2 vocab size: {self.tokenizer.vocab_size:,}")
-     #print(f"Output written to: {os.path.abspath(self.output_dir)}")
-
-     return self.total_tokens
-       
-      
+        print("Write Corpus")
+        self.write_corpus(test_ids,'test')
 
 
+        # Token usage summary
+        print("\n📊 Tokenization Summary")
+        print(f"Total tokens processed: {self.total_tokens:,}")
+        print(f"Unique token IDs used: {len(self.unique_tokens):,}")
+    
+if __name__ == "__main__":
 
-
+    print("Inside")
